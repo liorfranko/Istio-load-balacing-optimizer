@@ -60,6 +60,7 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logger.V(1).Info("ServiceEntry fetched", "ServiceEntries", serviceEntryList.Items)
 
 	// Collect addresses from the EndpointSlice
+	// TODO: add ready addresses only
 	endpointAddressesSet := make(map[string]struct{})
 	for _, endpoint := range endpointSlice.Endpoints {
 		for _, addr := range endpoint.Addresses {
@@ -85,6 +86,7 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					},
 				},
 			}
+			// TODO: send metric in the end
 		}
 	}
 

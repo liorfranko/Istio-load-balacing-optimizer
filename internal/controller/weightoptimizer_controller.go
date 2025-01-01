@@ -480,6 +480,7 @@ func (r *WeightOptimizerReconciler) updatePodMetrics(ctx context.Context, podsMe
 	return nil
 }
 
+// TODO: add lcality and zone to the endpoint map
 func (r *WeightOptimizerReconciler) getServiceEntryWeightMap(serviceEntry *istionetworkingv1.ServiceEntry) (map[string]uint32, error) {
 	// Change it to return a map of WorkloadEntry
 
@@ -599,6 +600,7 @@ func (r *WeightOptimizerReconciler) createWeightOptimizer(ctx context.Context, p
 			continue
 		}
 		// Add the endpoint to the WeightOptimizer
+		// :TODO: Add locality and zone to the endpoint
 		weightOptimizer.Spec.Endpoints = append(weightOptimizer.Spec.Endpoints, optimizationv1alpha1.Endpoint{
 			ServiceName:      objectKey.Name,
 			ServiceNamespace: namespace,
@@ -793,6 +795,12 @@ func (r *WeightOptimizerReconciler) newCakeTrick(ctx context.Context, podsMetric
 					"PodName", ep.PodName,
 					"PodAddress", ep.PodAddress,
 					"NewAdjustedWeight", adjustedWeight)
+			}
+
+			if adjustedWeight < 10 {
+				// If the adjusted weight is less than 10, set it to 10
+				adjustedWeight = 10
+				logger.V(1).Info("Adjusted weight is less than 10, setting it to 10", "PodName", ep.PodName, "PodAddress", ep.PodAddress, "AdjustedWeight", adjustedWeight)
 			}
 
 			//Log final adjusted weight before updating the map

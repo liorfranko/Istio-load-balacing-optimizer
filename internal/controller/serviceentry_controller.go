@@ -53,6 +53,8 @@ type ServiceEntryReconciler struct {
 	NewEndpointsPercentileWeight        int
 	MinimumWeight                       int
 	MaximumWeight                       int
+	//TODO: add dry run mode logic
+	//DryRun bool
 }
 
 //+kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch
@@ -131,6 +133,7 @@ func (r *ServiceEntryReconciler) HandleEndpointUpdate(ctx context.Context, req c
 	}
 
 	// Calculate average weight for new endpoints.
+	logger.Info("Calculating average weight for new endpoints", "ExistingWeights", existingWeights)
 	averageWeight := r.CreateDefaultWeightForNewEndpoints(existingWeights)
 	logger.Info("Calculated average weight for new endpoints", "AverageWeight", averageWeight)
 
@@ -139,6 +142,12 @@ func (r *ServiceEntryReconciler) HandleEndpointUpdate(ctx context.Context, req c
 	for _, slice := range endpointSlices.Items {
 		for _, endpoint := range slice.Endpoints {
 			// Prefer the IPv4 address; fallback to IPv6 if necessary
+
+			if endpoint.Conditions.Ready == nil || !*endpoint.Conditions.Ready {
+				logger.Info("Endpoint is not ready", "Endpoint", endpoint)
+				continue
+			}
+
 			var ip string
 			if len(endpoint.Addresses) > 0 {
 				ip = endpoint.Addresses[0]
@@ -149,12 +158,25 @@ func (r *ServiceEntryReconciler) HandleEndpointUpdate(ctx context.Context, req c
 
 			weight, found := existingWeights[ip]
 			if !found {
+				logger.Info("New endpoint detected entering the cluster with default weight", "IP", ip, "Weight", averageWeight)
 				weight = averageWeight // Assign the calculated average weight if new.
+			}
+
+			// Create a labels map. You can add additional labels as needed.
+			locality := map[string]string{}
+
+			// Safely handle the *string for zone:
+			if endpoint.Zone != nil {
+				locality["zone"] = *endpoint.Zone
+			} else {
+				locality["zone"] = "unknown"
 			}
 
 			mergedEndpoints = append(mergedEndpoints, &istioNetworkingV1.WorkloadEntry{
 				Address: ip,
 				Weight:  weight,
+				// Capture the zone/locality information for this endpoint.
+				Locality: locality["zone"],
 			})
 		}
 	}

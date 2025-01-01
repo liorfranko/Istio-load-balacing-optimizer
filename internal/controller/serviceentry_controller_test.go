@@ -1,32 +1,111 @@
-/*
-Copyright 2024.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controller
 
 import (
-	. "github.com/onsi/ginkgo/v2"
+	"testing"
 )
 
-var _ = Describe("ServiceEntry Controller", func() {
-	Context("When reconciling a resource", func() {
+func TestCreateDefaultWeightForNewEndpoints(t *testing.T) {
+	tests := []struct {
+		name                         string
+		existingWeights              map[string]uint32
+		NewEndpointsPercentileWeight int
+		MinimumWeight                int
+		MaximumWeight                int
+		expectedWeight               uint32
+	}{
+		{
+			name:                         "No existing weights",
+			existingWeights:              map[string]uint32{},
+			NewEndpointsPercentileWeight: 50, // Doesn't matter when existingWeights is empty
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               50, // (0 + 100) / 2
+		},
+		{
+			name:                         "Existing weights with 50% percentile",
+			existingWeights:              map[string]uint32{"ip1": 10, "ip2": 20, "ip3": 30},
+			NewEndpointsPercentileWeight: 50,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               10, // Average of lowest 1 weight (n=1)
+		},
+		{
+			name:                         "Existing weights with 80% percentile",
+			existingWeights:              map[string]uint32{"ip1": 10, "ip2": 20, "ip3": 30, "ip4": 40, "ip5": 50},
+			NewEndpointsPercentileWeight: 80,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               25, // Average of lowest 4 weights (n=4)
+		},
+		{
+			name:                         "Existing weights with 0% percentile",
+			existingWeights:              map[string]uint32{"ip1": 15, "ip2": 25, "ip3": 35},
+			NewEndpointsPercentileWeight: 0,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               15, // Average of lowest 1 weight (n=1)
+		},
+		{
+			name:                         "Existing weights with 100% percentile",
+			existingWeights:              map[string]uint32{"ip1": 10, "ip2": 20, "ip3": 30},
+			NewEndpointsPercentileWeight: 100,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               20, // Average of all weights (n=3)
+		},
+		{
+			name:                         "Minimum and Maximum weights adjusted",
+			existingWeights:              map[string]uint32{},
+			NewEndpointsPercentileWeight: 50, // Doesn't matter when existingWeights is empty
+			MinimumWeight:                10,
+			MaximumWeight:                90,
+			expectedWeight:               50, // (10 + 90) / 2
+		},
+		{
+			name:                         "Existing weights with 33% percentile",
+			existingWeights:              map[string]uint32{"ip1": 5, "ip2": 15, "ip3": 25, "ip4": 35, "ip5": 45},
+			NewEndpointsPercentileWeight: 33,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               5, // Average of lowest 1 weight (n=1)
+		},
+		{
+			name:                         "Existing weights with less than 1 endpoint after percentile calculation",
+			existingWeights:              map[string]uint32{"ip1": 50},
+			NewEndpointsPercentileWeight: 25,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               50, // Should consider at least one endpoint
+		},
+		{
+			name:                         "Existing weights with high percentile but few endpoints",
+			existingWeights:              map[string]uint32{"ip1": 10, "ip2": 20},
+			NewEndpointsPercentileWeight: 90,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               10,
+		},
+		{
+			name:                         "Existing weights with 10% percentile",
+			existingWeights:              map[string]uint32{"ip1": 5, "ip2": 15, "ip3": 25, "ip4": 35, "ip5": 45},
+			NewEndpointsPercentileWeight: 1,
+			MinimumWeight:                0,
+			MaximumWeight:                100,
+			expectedWeight:               5, // Average of lowest 1 weight (n=1)
+		},
+	}
 
-		It("should successfully reconcile the resource", func() {
-
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &ServiceEntryReconciler{
+				NewEndpointsPercentileWeight: tt.NewEndpointsPercentileWeight,
+				MinimumWeight:                tt.MinimumWeight,
+				MaximumWeight:                tt.MaximumWeight,
+			}
+			got := r.CreateDefaultWeightForNewEndpoints(tt.existingWeights)
+			if got != tt.expectedWeight {
+				t.Errorf("CreateDefaultWeightForNewEndpoints() = %v, want %v", got, tt.expectedWeight)
+			}
 		})
-	})
-})
+	}
+}
