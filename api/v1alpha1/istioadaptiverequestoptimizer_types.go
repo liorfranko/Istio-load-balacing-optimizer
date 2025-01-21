@@ -63,6 +63,9 @@ type IstioAdaptiveRequestOptimizerSpec struct {
 	// +optional
 	ServiceNamespace string `json:"service_namespace"`
 
+	// +optional
+	Locality bool `json:"locality"`
+
 	// ServicePorts specifies a list of service ports, including port number and protocol. If empty, all ports are considered.
 	// +optional
 	ServicePorts []ServicePort `json:"service_ports,omitempty"`
